@@ -68,18 +68,14 @@ jobs:
           PACKAGE_OWNER: ${{ steps.meta.outputs.owner }}
           PACKAGE_NAME: vdirsyncer-image
         # The package is private by default; a public store needs a public pull.
+        # This owner is a USER account, so /orgs/ returns 404 — use /users/.
         run: |
-          status=$(gh api "/orgs/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}" --jq '.visibility // empty' 2>/dev/null || echo "")
-          if [ "$status" != "public" ]; then
-            gh api --method PATCH "/orgs/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}" -f visibility=public
+          status=$(gh api "/users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}" --jq '.visibility // empty' 2>/dev/null || echo "")
+          if [ "$status" = "public" ]; then
+            echo "package already public"
+          elif gh api --method PATCH "/users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}" -f visibility=public 2>/dev/null; then
             echo "package set to public"
           else
-            echo "package already public"
-          fi
-          # A user-scoped package is not reachable through /orgs/; fall back to
-          # the user endpoint and the raw PATCH.
-          if [ "$status" != "public" ]; then
-            gh api --method PATCH "/users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}" -f visibility=public 2>/dev/null \
-              && echo "package set to public via the user endpoint" \
-              || echo "could not flip visibility automatically — set it in the GitHub UI"
+            echo "::warning::Could not flip the package visibility automatically."
+            echo "::warning::Set it manually: https://github.com/users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}/settings"
           fi
