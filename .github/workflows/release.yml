@@ -31,14 +31,19 @@ jobs:
       - name: Derive the tag
         id: meta
         run: |
+          # GHCR requires a lowercase owner: ${{ github.repository }} keeps the
+          # original casing (Mathi5), which the registry rejects.
+          OWNER="${IMAGE_OWNER}"
           if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
             VERSION="${GITHUB_REF_NAME#v}"
             echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-            echo "tags=ghcr.io/${{ github.repository }}:${VERSION},ghcr.io/${{ github.repository }}:latest" >> "$GITHUB_OUTPUT"
+            echo "tags=ghcr.io/${OWNER}/vdirsyncer-image:${VERSION},ghcr.io/${OWNER}/vdirsyncer-image:latest" >> "$GITHUB_OUTPUT"
           else
             echo "version=0.0.0-dev" >> "$GITHUB_OUTPUT"
-            echo "tags=ghcr.io/${{ github.repository }}:sha-${{ github.sha }}" >> "$GITHUB_OUTPUT"
+            echo "tags=ghcr.io/${OWNER}/vdirsyncer-image:sha-${{ github.sha }}" >> "$GITHUB_OUTPUT"
           fi
+        env:
+          IMAGE_OWNER: ${{ github.repository_owner }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -59,6 +64,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PACKAGE_OWNER: ${{ github.repository_owner }}
           PACKAGE_NAME: vdirsyncer-image
+        # The package is private by default; a public store needs a public pull.
         run: |
           status=$(gh api "/orgs/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}" --jq '.visibility // empty' 2>/dev/null || echo "")
           if [ "$status" != "public" ]; then
