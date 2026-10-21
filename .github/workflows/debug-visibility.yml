@@ -1,0 +1,35 @@
+name: Debug package visibility
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  debug:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: List the user's container packages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "== /users/mathi5/packages =="
+          gh api "/users/mathi5/packages?package_type=container" --jq '.[] | "\(.name) :: \(.visibility) :: \(.repository.repository_url // "no-repo")"' 2>&1 | head -20
+          echo "== /user/packages =="
+          gh api "/user/packages?package_type=container" --jq '.[] | "\(.name) :: \(.visibility)"' 2>&1 | head -20
+          echo "== try PATCH on the exact name =="
+          for p in vdirsyncer-image vdirsyncer_image; do
+            echo "-- $p"
+            gh api --method PATCH "/users/mathi5/packages/container/$p" -f visibility=public 2>&1 | head -5
+          done
+      - name: Probe the anonymous pull
+        run: |
+          for owner in mathi5 Mathi5; do
+            for pkg in vdirsyncer-image vdirsyncer_image; do
+              printf '%s/%s -> ' "$owner" "$pkg"
+              curl -s "https://ghcr.io/token?service=ghcr.io&scope=repository:$owner/$pkg:pull" | head -c 90
+              echo
+            done
+          done
