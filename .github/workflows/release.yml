@@ -31,9 +31,12 @@ jobs:
       - name: Derive the tag
         id: meta
         run: |
-          # GHCR requires a lowercase owner: ${{ github.repository }} keeps the
-          # original casing (Mathi5), which the registry rejects.
-          OWNER="${IMAGE_OWNER}"
+          # GHCR requires a lowercase owner. ${{ github.repository_owner }}
+          # returns the owner's login AS DISPLAYED ("Mathi5"), and
+          # ${{ github.repository }} keeps the repo casing too — the registry
+          # rejects both. Lowercase it explicitly.
+          OWNER="$(echo "${IMAGE_OWNER}" | tr '[:upper:]' '[:lower:]')"
+          echo "owner=${OWNER}" >> "$GITHUB_OUTPUT"
           if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
             VERSION="${GITHUB_REF_NAME#v}"
             echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
@@ -62,7 +65,7 @@ jobs:
       - name: Make the GHCR package public
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PACKAGE_OWNER: ${{ github.repository_owner }}
+          PACKAGE_OWNER: ${{ steps.meta.outputs.owner }}
           PACKAGE_NAME: vdirsyncer-image
         # The package is private by default; a public store needs a public pull.
         run: |
@@ -72,4 +75,11 @@ jobs:
             echo "package set to public"
           else
             echo "package already public"
+          fi
+          # A user-scoped package is not reachable through /orgs/; fall back to
+          # the user endpoint and the raw PATCH.
+          if [ "$status" != "public" ]; then
+            gh api --method PATCH "/users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}" -f visibility=public 2>/dev/null \
+              && echo "package set to public via the user endpoint" \
+              || echo "could not flip visibility automatically — set it in the GitHub UI"
           fi
